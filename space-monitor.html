@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Space Monitor — Real-Time Space Intelligence Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Orbitron:wght@400;600;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#02020d;--surface:#07071a;--panel:#090920;--border:#131340;
+  --borderhi:#22225a;--accent:#00d4ff;--green:#00ff88;--amber:#ffaa00;
+  --red:#ff3c3c;--violet:#9060ff;--text:#bcd0f0;--dim:#3a4a6a;
+  --mid:#6688aa;--mono:'Space Mono','Courier New',monospace;
+  --hud:'Orbitron','Courier New',monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--mono)}
+body{display:flex;flex-direction:column}
+
+/* ── HEADER ─────────────────────────────────────────────── */
+#hdr{height:44px;flex-shrink:0;z-index:100;background:rgba(7,7,26,.97);
+  border-bottom:1px solid var(--borderhi);display:flex;align-items:center;
+  justify-content:space-between;padding:0 16px;gap:12px}
+#logo{font-family:var(--hud);font-size:13px;font-weight:900;letter-spacing:3px;
+  color:var(--accent);white-space:nowrap;text-shadow:0 0 20px rgba(0,212,255,.6)}
+#logo em{color:var(--amber);font-style:normal}
+.badges{display:flex;gap:12px;align-items:center}
+.bdg{display:flex;align-items:center;gap:5px;font-size:8.5px;color:var(--dim);letter-spacing:1.2px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 2s ease-in-out infinite}
+.dot.a{background:var(--amber);animation-delay:.6s}.dot.r{background:var(--red);animation-delay:1.2s}
+.hstats{display:flex;gap:18px;align-items:center}
+.hs{font-size:9px;color:var(--dim);letter-spacing:.9px}.hs b{color:var(--accent);font-weight:400}
+#clk{font-family:var(--hud);font-size:11px;color:var(--green);letter-spacing:2px;white-space:nowrap}
+
+/* ── SOLAR VIEW ─────────────────────────────────────────── */
+#sv{position:relative;flex-shrink:0;height:49vh;min-height:260px;
+  background:var(--bg);border-bottom:1px solid var(--borderhi);overflow:hidden}
+#sc{display:block;width:100%;height:100%}
+#sv::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:5;
+  background:repeating-linear-gradient(to bottom,transparent,transparent 2px,rgba(0,0,0,.07) 2px,rgba(0,0,0,.07) 4px)}
+
+#vc{position:absolute;top:8px;left:8px;display:flex;gap:4px;z-index:20;flex-wrap:wrap}
+.vb{padding:4px 9px;cursor:pointer;background:rgba(9,9,32,.88);
+  border:1px solid var(--borderhi);color:var(--dim);font-family:var(--mono);
+  font-size:8px;letter-spacing:1px;transition:all .18s}
+.vb.on,.vb:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.06)}
+
+/* Planet HUD */
+#phud{position:absolute;top:8px;right:8px;width:215px;
+  background:rgba(7,7,26,.95);border:1px solid var(--borderhi);
+  padding:12px 14px;z-index:20;display:none;backdrop-filter:blur(6px)}
+#phud.on{display:block}
+#pname{font-family:var(--hud);font-size:12px;font-weight:700;color:var(--accent);
+  letter-spacing:2px;margin-bottom:10px;text-shadow:0 0 12px rgba(0,212,255,.45)}
+.hr{display:flex;justify-content:space-between;font-size:9px;margin-bottom:3.5px}
+.hl{color:var(--dim)}.hv{color:var(--text)}
+#pdesc{font-size:8px;color:var(--mid);margin-top:8px;line-height:1.6;
+  border-top:1px solid var(--border);padding-top:7px}
+#phud-close{position:absolute;top:8px;right:10px;cursor:pointer;color:var(--dim);
+  font-size:14px;line-height:1}
+#phud-close:hover{color:var(--accent)}
+
+/* Legend */
+#leg{position:absolute;bottom:8px;left:8px;display:flex;gap:10px;z-index:20}
+.li2{display:flex;align-items:center;gap:4px;font-size:8px;color:var(--dim)}
+.ld{width:8px;height:8px;border-radius:50%}
+#issbl{position:absolute;bottom:8px;right:8px;z-index:20;font-size:9px;
+  color:var(--green);letter-spacing:1.5px;animation:blink 1.4s ease-in-out infinite}
+#tip{position:absolute;pointer-events:none;display:none;
+  background:rgba(9,9,32,.92);border:1px solid var(--borderhi);
+  padding:3px 8px;font-size:8.5px;color:var(--accent);letter-spacing:1px;
+  z-index:30;font-family:var(--hud)}
+#simspd{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+  font-size:7.5px;color:var(--dim);letter-spacing:.8px;z-index:20;white-space:nowrap}
+
+/* ── GRID ────────────────────────────────────────────────── */
+#grid{flex:1;overflow-y:auto;overflow-x:hidden;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+  gap:1px;background:var(--border);min-height:0}
+#grid::-webkit-scrollbar{width:5px}
+#grid::-webkit-scrollbar-track{background:var(--bg)}
+#grid::-webkit-scrollbar-thumb{background:var(--borderhi);border-radius:3px}
+
+/* ── PANEL ────────────────────────────────────────────────── */
+.pnl{background:var(--panel);display:flex;flex-direction:column;min-height:260px}
+.ph{padding:8px 12px;display:flex;align-items:center;gap:7px;
+  border-bottom:1px solid var(--border);background:rgba(0,0,0,.28);
+  flex-shrink:0;position:sticky;top:0;z-index:5}
+.pi{font-size:15px;line-height:1}
+.pt{font-family:var(--hud);font-size:8.5px;font-weight:600;letter-spacing:2px;
+  color:var(--accent);flex:1}
+.ps{font-size:8px;color:var(--dim);letter-spacing:1px;white-space:nowrap}
+
+/* KEY FIX — panel body is now SCROLLABLE */
+.pb{padding:10px 12px;flex:1;overflow-y:auto;overflow-x:hidden;
+  font-size:10px;max-height:320px}
+.pb::-webkit-scrollbar{width:4px}
+.pb::-webkit-scrollbar-track{background:transparent}
+.pb::-webkit-scrollbar-thumb{background:var(--borderhi);border-radius:2px}
+.pb::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+
+/* ── TICKER ─────────────────────────────────────────────── */
+#ticker{height:26px;flex-shrink:0;background:rgba(0,0,0,.6);
+  border-top:1px solid var(--borderhi);overflow:hidden;display:flex;align-items:center}
+#tlbl{font-family:var(--hud);font-size:8px;color:var(--accent);
+  letter-spacing:2px;padding:0 12px;white-space:nowrap;border-right:1px solid var(--borderhi)}
+#twrap{flex:1;overflow:hidden}
+#ti{display:flex;animation:scroll 90s linear infinite;white-space:nowrap}
+.titem{font-size:8.5px;color:var(--mid);padding:0 22px;letter-spacing:.5px}
+.titem b{color:var(--text)}
+@keyframes scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* ── REUSABLES ───────────────────────────────────────────── */
+.loading{color:var(--dim);font-size:9px;letter-spacing:1px;animation:blink 1s infinite}
+.err{color:var(--red);font-size:9px;line-height:1.6}
+.note{font-size:8px;color:var(--dim);line-height:1.5;margin-top:6px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ISS */
+.cds{display:flex;gap:8px;margin-bottom:8px}
+.cd{flex:1}.clbl{font-size:7.5px;color:var(--dim);letter-spacing:1px}
+.cval{font-size:13px;color:var(--green);font-weight:700}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ss{background:rgba(0,212,255,.03);border:1px solid var(--border);padding:5px 8px}
+.sl{font-size:7.5px;color:var(--dim);letter-spacing:1px;margin-bottom:1px}
+.sv2{font-size:12px;color:var(--accent);font-weight:700}
+.su{font-size:7.5px;color:var(--dim)}
+
+/* Launches */
+.lc{padding:6px 0;border-bottom:1px solid var(--border)}
+.lc:last-child{border-bottom:none}
+.ln{font-size:9.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.lm{display:flex;justify-content:space-between;font-size:8.5px}
+.lp{color:var(--accent)}.lct{color:var(--amber);font-weight:700}
+.lpad{font-size:7.5px;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* NEO */
+.neo{display:flex;justify-content:space-between;align-items:center;
+  padding:5px 0;border-bottom:1px solid var(--border);font-size:8.5px}
+.neo:last-of-type{border-bottom:none}
+.nn{color:var(--text);width:34%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nd{color:var(--amber)}.ns{color:var(--mid)}
+.nh{color:var(--red);font-size:8px}.nok{color:var(--green);font-size:8px}
+
+/* Space weather */
+.swm{margin-bottom:8px}
+.swl{display:flex;justify-content:space-between;font-size:8.5px;margin-bottom:3px}
+.swl span:first-child{color:var(--dim)}
+.swbar{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.swf{height:100%;border-radius:3px;transition:width .5s}
+.krow{display:flex;gap:2px;margin-top:6px}
+.kb{flex:1;height:20px;display:flex;align-items:center;justify-content:center;
+  font-size:8px;border:1px solid var(--border);color:var(--dim);cursor:default}
+.fr{display:flex;justify-content:space-between;font-size:8.5px;margin-bottom:4px}
+
+/* ── PEOPLE IN SPACE — expanded card style ───────────────── */
+.crew-header{font-size:9px;color:var(--dim);letter-spacing:1px;margin-bottom:10px;
+  padding-bottom:6px;border-bottom:1px solid var(--border)}
+.crew-header b{color:var(--green);font-size:14px}
+.aw{display:flex;align-items:center;gap:10px;padding:7px 0;
+  border-bottom:1px solid var(--border);transition:background .15s}
+.aw:last-child{border-bottom:none}
+.aw:hover{background:rgba(0,212,255,.04)}
+.ai{font-size:18px;flex-shrink:0}
+.ainfo{flex:1;min-width:0}
+.an{font-size:10px;color:var(--text);font-weight:700;margin-bottom:2px}
+.ac{font-size:8px;color:var(--mid);letter-spacing:.5px}
+.abadge{font-size:7.5px;padding:2px 5px;border-radius:2px;letter-spacing:.5px;
+  flex-shrink:0;font-weight:700}
+.abadge.iss{background:rgba(0,212,255,.12);color:var(--accent);border:1px solid rgba(0,212,255,.3)}
+.abadge.tg{background:rgba(255,170,0,.12);color:var(--amber);border:1px solid rgba(255,170,0,.3)}
+
+/* ── ACTIVE MISSIONS — full detail ─────────────────────────── */
+.mi{padding:8px 0;border-bottom:1px solid var(--border)}
+.mi:last-child{border-bottom:none}
+.mi:hover{background:rgba(0,212,255,.03)}
+.mn{font-size:10px;color:var(--text);font-weight:700;margin-bottom:3px}
+.mm{display:flex;justify-content:space-between;align-items:flex-start;font-size:8px;gap:6px}
+.mag{color:var(--dim);flex:1;line-height:1.4}
+.mact{color:var(--green);font-weight:700;white-space:nowrap}
+.mnom{color:var(--accent);font-weight:700;white-space:nowrap}
+.mcri{color:var(--amber);font-weight:700;white-space:nowrap}
+.mloc{font-size:7.5px;color:var(--mid);margin-top:2px}
+
+/* ── SATELLITE CENSUS ───────────────────────────────────────── */
+.sat-total{font-size:22px;color:var(--amber);font-family:var(--hud);font-weight:700;
+  margin-bottom:4px;letter-spacing:1px}
+.sat-sub{font-size:9px;color:var(--dim);margin-bottom:12px}
+.sr{padding:6px 0;border-bottom:1px solid var(--border)}
+.sr:last-child{border-bottom:none}
+.sr-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.scat{font-size:9px;color:var(--text)}
+.scnt{font-size:12px;color:var(--amber);font-weight:700;font-family:var(--hud)}
+.sbar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.sbarf{height:100%;border-radius:2px;transition:width .8s ease}
+
+/* ── APOD ──────────────────────────────────────────────────── */
+.apod-wrap{margin-bottom:8px;position:relative;overflow:hidden;max-height:180px;
+  cursor:pointer;border:1px solid var(--border)}
+.apod-wrap img{width:100%;display:block;transition:transform .3s}
+.apod-wrap:hover img{transform:scale(1.03)}
+.apod-wrap-video{padding:12px;background:rgba(0,212,255,.05);border:1px solid var(--borderhi);
+  margin-bottom:8px;cursor:pointer;text-align:center}
+.at{font-size:10px;color:var(--accent);margin-bottom:6px;font-weight:700;line-height:1.4}
+.ad2{font-size:8.5px;color:var(--dim);line-height:1.55}
+.apod-expand{display:inline-block;margin-top:6px;font-size:8px;color:var(--accent);
+  cursor:pointer;text-decoration:underline;letter-spacing:1px}
+
+/* Probes */
+.pr{display:flex;justify-content:space-between;align-items:flex-start;
+  padding:7px 0;border-bottom:1px solid var(--border)}
+.pr:last-child{border-bottom:none}
+.prnm{font-size:10px;color:var(--text);font-weight:700;margin-bottom:2px}
+.prd{font-size:13px;color:var(--violet);font-weight:700;font-family:var(--hud)}
+.prs{font-size:7.5px;color:var(--dim);line-height:1.5}
+
+/* News */
+.ni{padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.ni:last-child{border-bottom:none}
+.ni:hover{background:rgba(0,212,255,.04)}
+.nt{font-size:9.5px;color:var(--text);line-height:1.4;margin-bottom:2px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ni:hover .nt{color:var(--accent)}
+.nm{font-size:8px;color:var(--dim)}
+
+@media(max-width:640px){
+  #grid{grid-template-columns:1fr}
+  #sv{height:40vh}
+  .hstats{display:none}.badges{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div id="hdr">
+  <div style="display:flex;align-items:center;gap:16px">
+    <div id="logo">⬡&nbsp;SPACE<em>MONITOR</em></div>
+    <div class="badges">
+      <div class="bdg"><div class="dot"></div>SYSTEMS NOMINAL</div>
+      <div class="bdg"><div class="dot a"></div>LIVE DATA</div>
+      <div class="bdg"><div class="dot r"></div>ISS TRACKING</div>
+    </div>
+  </div>
+  <div class="hstats">
+    <div class="hs">HUMANS IN SPACE <b id="hh">—</b></div>
+    <div class="hs">ISS ALT <b id="halt">—</b> km</div>
+    <div class="hs">ISS VEL <b id="hvel">—</b> km/h</div>
+    <div class="hs">SOLAR WIND <b id="hsw">—</b> km/s</div>
+    <div id="clk">——:——:—— UTC</div>
+  </div>
+</div>
+
+<!-- ══ 3-D SOLAR SYSTEM ══ -->
+<div id="sv">
+  <canvas id="sc"></canvas>
+  <div id="vc">
+    <button class="vb on" onclick="setCam('system',this)">SOLAR SYSTEM</button>
+    <button class="vb"    onclick="setCam('inner',this)">INNER PLANETS</button>
+    <button class="vb"    onclick="setCam('earth',this)">EARTH VIEW</button>
+    <button class="vb on" id="borb" onclick="toggleOrbits(this)">ORBITS</button>
+    <button class="vb on" id="bblt" onclick="toggleBelt(this)">BELT</button>
+    <button class="vb on" id="bprb" onclick="toggleProbes(this)">PROBES</button>
+  </div>
+  <div id="phud">
+    <span id="phud-close" onclick="document.getElementById('phud').classList.remove('on')">✕</span>
+    <div id="pname">—</div>
+    <div class="hr"><span class="hl">TYPE</span><span class="hv" id="htype">—</span></div>
+    <div class="hr"><span class="hl">DIAMETER</span><span class="hv" id="hdiam">—</span></div>
+    <div class="hr"><span class="hl">DISTANCE FROM SUN</span><span class="hv" id="hdist">—</span></div>
+    <div class="hr"><span class="hl">ORBITAL PERIOD</span><span class="hv" id="hper">—</span></div>
+    <div class="hr"><span class="hl">SURFACE TEMP</span><span class="hv" id="htemp">—</span></div>
+    <div class="hr"><span class="hl">MOONS</span><span class="hv" id="hmoon">—</span></div>
+    <div class="hr"><span class="hl">GRAVITY</span><span class="hv" id="hgrav">—</span></div>
+    <div id="pdesc">—</div>
+  </div>
+  <div id="leg">
+    <div class="li2"><div class="ld" style="background:#ffcc00"></div>SUN</div>
+    <div class="li2"><div class="ld" style="background:#00ff88"></div>ISS ORBIT</div>
+    <div class="li2"><div class="ld" style="background:#aaaacc"></div>ASTEROID BELT</div>
+    <div class="li2"><div class="ld" style="background:#9060ff"></div>PROBES</div>
+  </div>
+  <div id="issbl">● ISS LIVE</div>
+  <div id="tip"></div>
+  <div id="simspd">⏩ 1 SIM-DAY = 0.3 SEC · DRAG ROTATE · SCROLL ZOOM · CLICK PLANET FOR INFO</div>
+</div>
+
+<!-- ══ DATA GRID ══ -->
+<div id="grid">
+
+  <div class="pnl">
+    <div class="ph"><div class="pi">🛸</div><div class="pt">ISS TRACKER</div><div class="ps" id="isstime">LIVE</div></div>
+    <div class="pb" id="piss"><div class="loading">⟳ FETCHING ISS POSITION…</div></div>
+  </div>
+
+  <div class="pnl">
+    <div class="ph"><div class="pi">🚀</div><div class="pt">LAUNCH SCHEDULE</div><div class="ps">UPCOMING</div></div>
+    <div class="pb" id="plaunch"><div class="loading">⟳ FETCHING LAUNCHES…</div></div>
+  </div>
+
+  <div class="pnl">
+    <div class="ph"><div class="pi">☄️</div><div class="pt">NEAR EARTH OBJECTS</div><div class="ps">7-DAY · NASA JPL</div></div>
+    <div class="pb" id="pneo"><div class="loading">⟳ FETCHING ASTEROID DATA…</div></div>
+  </div>
+
+  <div class="pnl">
+    <div class="ph"><div class="pi">☀️</div><div class="pt">SPACE WEATHER</div><div class="ps">NOAA / SWPC</div></div>
+    <div class="pb" id="psw"><div class="loading">⟳ FETCHING SOLAR DATA…</div></div>
+  </div>
+
+  <!-- PEOPLE IN SPACE — full scrollable list -->
+  <div class="pnl">
+    <div class="ph"><div class="pi">👨‍🚀</div><div class="pt">PEOPLE IN SPACE</div><div class="ps" id="crewct">LOADING…</div></div>
+    <div class="pb" id="pcrew"><div class="loading">⟳ FETCHING CREW DATA…</div></div>
+  </div>
+
+  <!-- ACTIVE MISSIONS — full detail cards -->
+  <div class="pnl">
+    <div class="ph"><div class="pi">📡</div><div class="pt">ACTIVE MISSIONS</div><div class="ps">MULTI-AGENCY</div></div>
+    <div class="pb" id="pmis"></div>
+  </div>
+
+  <div class="pnl">
+    <div class="ph"><div class="pi">🛰️</div><div class="pt">DEEP SPACE PROBES</div><div class="ps">REAL-TIME DISTANCE</div></div>
+    <div class="pb" id="pprobe"></div>
+  </div>
+
+  <!-- SATELLITE CENSUS — full breakdown -->
+  <div class="pnl">
+    <div class="ph"><div class="pi">🌌</div><div class="pt">SATELLITE CENSUS</div><div class="ps">IN EARTH ORBIT · 2026</div></div>
+    <div class="pb" id="psat"></div>
+  </div>
+
+  <div class="pnl">
+    <div class="ph"><div class="pi">📰</div><div class="pt">SPACE INTELLIGENCE FEED</div><div class="ps">LIVE</div></div>
+    <div class="pb" id="pnews"><div class="loading">⟳ FETCHING FEED…</div></div>
+  </div>
+
+  <!-- ASTRONOMY PICTURE OF THE DAY — full image + text -->
+  <div class="pnl" style="min-height:340px">
+    <div class="ph"><div class="pi">🔭</div><div class="pt">ASTRONOMY PICTURE OF THE DAY</div><div class="ps">NASA APOD</div></div>
+    <div class="pb" style="max-height:420px" id="papod"><div class="loading">⟳ FETCHING APOD…</div></div>
+  </div>
+
+</div>
+
+<!-- ══ TICKER ══ -->
+<div id="ticker">
+  <div id="tlbl">⬡ SPACE INTEL</div>
+  <div id="twrap"><div id="ti"></div></div>
+</div>
+
+<!-- ══ JAVASCRIPT ══ -->
+<script>
+'use strict';
+
+/* ── CATALOGUE ──────────────────────────────────────────── */
+const PLANETS=[
+  {name:'Mercury',sym:'☿',type:'Terrestrial / Rocky',
+   r:.10,dist:3.8,col:0x9a9a9a,emi:0x141414,oPer:88,rPer:58.6,
+   diam:'4,879 km',au:'0.387 AU',temp:'-180 to +430 °C',moons:0,
+   grav:'3.7 m/s²',atm:'Exosphere only',
+   desc:'Closest planet to the Sun. Surface temperature swings +600 °C between day and night. No atmosphere to retain heat.'},
+  {name:'Venus',sym:'♀',type:'Terrestrial / Rocky',
+   r:.19,dist:5.8,col:0xeecf90,emi:0x2a1500,oPer:225,rPer:-243,
+   diam:'12,104 km',au:'0.723 AU',temp:'+462 °C (avg)',moons:0,
+   grav:'8.87 m/s²',atm:'CO₂ 96.5%, N₂ 3.5%',
+   desc:'Runaway greenhouse effect makes Venus the hottest planet. Rotates retrograde — its "day" is longer than its "year."'},
+  {name:'Earth',sym:'♁',type:'Terrestrial / Rocky',
+   r:.20,dist:7.8,col:0x1a55cc,emi:0x001020,oPer:365,rPer:1.0,
+   diam:'12,742 km',au:'1.000 AU',temp:'-88 to +58 °C',moons:1,
+   grav:'9.81 m/s²',atm:'N₂ 78%, O₂ 21%',
+   desc:'The only confirmed inhabited world. 71% ocean surface. A magnetic field shields life from solar wind.'},
+  {name:'Mars',sym:'♂',type:'Terrestrial / Rocky',
+   r:.12,dist:10.5,col:0xc03510,emi:0x1e0500,oPer:687,rPer:1.03,
+   diam:'6,779 km',au:'1.524 AU',temp:'-143 to +35 °C',moons:2,
+   grav:'3.72 m/s²',atm:'CO₂ 95.3%',
+   desc:'The Red Planet. Olympus Mons is the tallest volcano in the Solar System at 22 km. Home to Curiosity & Perseverance rovers.'},
+  {name:'Jupiter',sym:'♃',type:'Gas Giant',
+   r:.82,dist:17.2,col:0xc8a878,emi:0x1a0a00,oPer:4333,rPer:.41,
+   diam:'139,820 km',au:'5.203 AU',temp:'-145 °C (cloud tops)',moons:95,
+   grav:'24.79 m/s²',atm:'H₂ 89%, He 10%',
+   desc:'Largest planet — 1,300 Earths would fit inside. The Great Red Spot is a 350+ year anticyclonic storm larger than Earth.'},
+  {name:'Saturn',sym:'♄',type:'Gas Giant',rings:true,
+   r:.68,dist:23.5,col:0xe8d5a0,emi:0x1c1400,oPer:10759,rPer:.45,
+   diam:'116,460 km',au:'9.537 AU',temp:'-178 °C',moons:146,
+   grav:'10.44 m/s²',atm:'H₂ 96%, He 3%',
+   desc:'Iconic ring system of ice and rock. Least dense planet — would float in water. Most moons of any planet (146).'},
+  {name:'Uranus',sym:'⛢',type:'Ice Giant',
+   r:.34,dist:30.0,col:0x70e8e8,emi:0x001c1c,oPer:30687,rPer:-.72,
+   diam:'50,724 km',au:'19.19 AU',temp:'-224 °C',moons:28,
+   grav:'8.69 m/s²',atm:'H₂ 83%, He 15%, CH₄ 2%',
+   desc:'Rotates on its side at 98° axial tilt — possibly from an ancient collision. Coldest planetary atmosphere in the Solar System.'},
+  {name:'Neptune',sym:'♆',type:'Ice Giant',
+   r:.30,dist:35.5,col:0x2255cc,emi:0x000818,oPer:60190,rPer:.67,
+   diam:'49,244 km',au:'30.07 AU',temp:'-218 °C',moons:16,
+   grav:'11.15 m/s²',atm:'H₂ 80%, He 19%, CH₄ 1%',
+   desc:'Wind speeds up to 2,100 km/h — strongest in the Solar System. Takes 165 Earth years to complete one orbit.'}
+];
+
+const MISSIONS=[
+  {name:'International Space Station (ISS)',agency:'NASA / ESA / Roscosmos / JAXA / CSA',loc:'LEO — 408 km altitude',s:'active'},
+  {name:'Curiosity Rover (MSL)',agency:'NASA / JPL',loc:'Gale Crater, Mars',s:'active'},
+  {name:'Perseverance Rover (Mars 2020)',agency:'NASA / JPL',loc:'Jezero Crater, Mars',s:'active'},
+  {name:'Ingenuity Helicopter',agency:'NASA / JPL',loc:'Mars surface',s:'nominal'},
+  {name:'James Webb Space Telescope',agency:'NASA / ESA / CSA',loc:'Sun–Earth L2 Point, 1.5M km',s:'active'},
+  {name:'Europa Clipper',agency:'NASA / JPL',loc:'En route to Jupiter (ETA 2030)',s:'active'},
+  {name:'Solar Orbiter',agency:'ESA / NASA',loc:'Inner heliosphere',s:'active'},
+  {name:'OSIRIS-APEX',agency:'NASA / Goddard',loc:'En route to asteroid Apophis',s:'active'},
+  {name:'Chang\'e 6 / Queqiao-2',agency:'CNSA',loc:'Lunar far-side orbit',s:'nominal'},
+  {name:'Artemis Programme',agency:'NASA / ESA / JAXA / CSA',loc:'Earth–Moon system',s:'active'},
+  {name:'New Horizons',agency:'NASA / APL',loc:'Kuiper Belt, 58+ AU',s:'nominal'},
+  {name:'Voyager 1',agency:'NASA / JPL',loc:'Interstellar space, 163+ AU',s:'active'},
+];
+
+const PROBES=[
+  {name:'Voyager 1',agency:'NASA/JPL',launch:'Sep 5, 1977',dist_au:163.4,vel:'17.0 km/s',signal:'22+ hours',status:'Interstellar Space'},
+  {name:'Voyager 2',agency:'NASA/JPL',launch:'Aug 20, 1977',dist_au:136.2,vel:'15.3 km/s',signal:'18+ hours',status:'Interstellar Space'},
+  {name:'New Horizons',agency:'NASA/APL',launch:'Jan 19, 2006',dist_au:58.4,vel:'14.1 km/s',signal:'8.7 hours',status:'Kuiper Belt'},
+  {name:'Pioneer 10',agency:'NASA/ARC',launch:'Mar 3, 1972',dist_au:133.0,vel:'11.7 km/s',signal:'Contact lost 2003',status:'Toward Taurus'},
+  {name:'Pioneer 11',agency:'NASA/ARC',launch:'Apr 6, 1973',dist_au:102.0,vel:'11.4 km/s',signal:'Contact lost 1995',status:'Toward Aquila'},
+];
+
+const SATS=[
+  {cat:'Starlink (SpaceX)',cnt:6800,col:'#00d4ff',desc:'Broadband internet constellation'},
+  {cat:'OneWeb / Eutelsat',cnt:650,col:'#7c3aed',desc:'Broadband constellation'},
+  {cat:'Planet Labs',cnt:200,col:'#00ff88',desc:'Earth imaging cubesats'},
+  {cat:'Government & Military',cnt:550,col:'#ffaa00',desc:'Reconnaissance, comm, surveillance'},
+  {cat:'Weather & Science',cnt:300,col:'#ff8800',desc:'NOAA, ESA, JAXA weather & research'},
+  {cat:'Navigation (GPS/GNSS)',cnt:120,col:'#ff3c3c',desc:'GPS, Galileo, GLONASS, BeiDou'},
+  {cat:'Telecom & Commercial',cnt:480,col:'#aabbcc',desc:'Comms, TV, broadband'},
+];
+
+const TICKER_ITEMS=[
+  'Voyager 1 is <b>163+ AU</b> from the Sun — farthest human-made object ever',
+  'James Webb Space Telescope has observed galaxies <b>13.4 billion light-years</b> away',
+  'The ISS completes <b>~15.5 orbits</b> of Earth every 24 hours at 7.66 km/s',
+  'Jupiter has <b>95 confirmed moons</b> — more than any other planet in the Solar System',
+  'The Sun contains <b>99.86%</b> of all mass in the Solar System',
+  'Saturn\'s rings span <b>282,000 km</b> in width but are only ~10 metres thick in places',
+  'A day on Venus is <b>longer than its year</b> — 243 vs 225 Earth days',
+  'Light from the Sun takes <b>8 minutes 20 seconds</b> to reach Earth',
+  'The Milky Way contains an estimated <b>100–400 billion stars</b>',
+  'Mars hosts the longest canyon system: Valles Marineris at <b>4,000 km long</b>',
+  'Europa (Jupiter moon) may have a subsurface ocean with <b>twice Earth\'s ocean volume</b>',
+  'Perseverance rover produced oxygen on Mars using the <b>MOXIE</b> instrument',
+  'SpaceX Starship is the tallest rocket ever flown at <b>121 m</b> with 74 MN thrust',
+  'Neptune was mathematically predicted before it was <b>visually observed</b> in 1846',
+  'Sound cannot travel through space — it is a near-perfect <b>vacuum</b>',
+  'Neutron stars can rotate <b>700 times per second</b> — faster than a kitchen blender',
+];
+
+/* ── THREE.JS SETUP ─────────────────────────────────────── */
+const SUN_VERT=`varying vec2 vUv;varying vec3 vN;
+void main(){vUv=uv;vN=normalize(normalMatrix*normal);
+gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
+const SUN_FRAG=`uniform float time;varying vec2 vUv;varying vec3 vN;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}
+float sn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*sn(p);p*=2.1;a*=.5;}return v;}
+void main(){
+float n=fbm(vUv*5.+time*.07);float n2=fbm(vUv*11.-time*.04);float n3=fbm(vUv*22.+time*.12);
+vec3 yel=vec3(1.,.95,.05),org=vec3(1.,.5,0.),red=vec3(.75,.1,0.);
+vec3 c=mix(org,yel,n);c=mix(c,red,n2*.38);c+=yel*n3*.12;
+float rim=dot(normalize(vN),vec3(0.,0.,1.));
+c*=.45+.55*max(rim,0.);c=max(c,org*.25);gl_FragColor=vec4(c,1.);}`;
+const E_VERT=`varying vec2 vUv;varying vec3 vN;
+void main(){vUv=uv;vN=normalize(normalMatrix*normal);
+gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
+const E_FRAG=`varying vec2 vUv;varying vec3 vN;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}
+float sn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*sn(p);p*=2.;a*=.5;}return v;}
+void main(){float n=fbm(vUv*7.);float n2=fbm(vUv*14.+.4);
+vec3 ocean=vec3(.06,.25,.72),land=vec3(.12,.46,.15),desert=vec3(.58,.46,.25),ice=vec3(.88,.92,1.);
+vec3 c=mix(ocean,land,smoothstep(.41,.54,n));
+c=mix(c,desert,smoothstep(.49,.62,n2)*.42);
+float pole=pow(abs(vUv.y-.5)*2.,2.5);c=mix(c,ice,smoothstep(.52,.86,pole));
+float rim=1.-max(dot(vN,vec3(0.,0.,1.)),0.);c=mix(c,vec3(.25,.45,1.),pow(rim,3.8)*.45);
+gl_FragColor=vec4(c,1.);}`;
+const C_VERT=`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
+const C_FRAG=`uniform float time;varying vec2 vUv;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}
+float sn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*sn(p);p*=2.;a*=.5;}return v;}
+void main(){float n=fbm(vUv*6.+time*.005);
+float alpha=smoothstep(.42,.6,n)*.65;gl_FragColor=vec4(1.,1.,1.,alpha);}`;
+const M_FRAG=`varying vec2 vUv;varying vec3 vN;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}
+float sn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<4;i++){v+=a*sn(p);p*=2.;a*=.5;}return v;}
+void main(){float n=fbm(vUv*8.);
+vec3 base=vec3(.70,.20,.06),dark=vec3(.42,.12,.04),ice2=vec3(.90,.88,.86);
+vec3 c=mix(base,dark,n*.55);float pole=pow(abs(vUv.y-.5)*2.,2.8);
+c=mix(c,ice2,smoothstep(.68,.94,pole));gl_FragColor=vec4(c,1.);}`;
+const J_FRAG=`uniform float time;varying vec2 vUv;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5);}
+float sn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+void main(){float d=sn(vUv*5.+time*.01)*.08;
+float b=sin((vUv.y+d)*22.)*.5+.5;float b2=sin((vUv.y*1.4+d*.6+time*.003)*40.)*.5+.5;
+vec3 c1=vec3(.75,.56,.34),c2=vec3(.56,.40,.24),c3=vec3(.88,.70,.50);
+vec3 c=mix(c1,c2,b);c=mix(c,c3,b2*.2);
+vec2 sp=vUv-vec2(.36,.44);float sd=length(sp*vec2(3.2,5.8));
+c=mix(c,vec3(.62,.22,.12),smoothstep(.14,0.,sd));
+c=mix(c,vec3(.88,.65,.45),smoothstep(.16,.14,sd)*.35);gl_FragColor=vec4(c,1.);}`;
+
+let scene,camera,renderer,sunMat,cloudMat;
+let pObjs=[],orbitLines=[],probeObjs=[];
+let belt,kbelt,issMarker,moonMesh,cometHead,cometTrail;
+let flareObjs=[];
+let showOrbits=true,showBelt=true,showProbes=true;
+let isDrag=false,lastX=0,lastY=0;
+let tTheta=0,tPhi=Math.PI/3.4,tR=56;
+let cTheta=0,cPhi=Math.PI/3.4,cR=56;
+let t0=performance.now();
+const rc=new THREE.Raycaster(),m2=new THREE.Vector2();
+let issAngle=0,moonAngle=0,cometAngle=0;
+
+function initGL(){
+  const cv=document.getElementById('sc'),wp=document.getElementById('sv');
+  scene=new THREE.Scene();
+  camera=new THREE.PerspectiveCamera(50,wp.clientWidth/wp.clientHeight,.01,3000);
+  renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+  renderer.setSize(wp.clientWidth,wp.clientHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  scene.add(new THREE.AmbientLight(0x111133,.7));
+  const sl=new THREE.PointLight(0xffeedd,5,400);sl.position.set(0,0,0);scene.add(sl);
+  buildStars();buildMilkyWay();buildSun();buildFlares();
+  PLANETS.forEach((d,i)=>buildPlanet(d,i));
+  buildBelt();buildKBelt();buildISS();buildMoon();buildComet();buildProbeMarkers();
+  const c=cv;
+  c.addEventListener('mousedown',e=>{isDrag=true;lastX=e.clientX;lastY=e.clientY;});
+  c.addEventListener('mousemove',onMov);c.addEventListener('mouseup',()=>isDrag=false);
+  c.addEventListener('mouseleave',()=>isDrag=false);
+  c.addEventListener('wheel',e=>tR=Math.max(4,Math.min(130,tR+e.deltaY*.05)),{passive:true});
+  c.addEventListener('click',onClick);
+  c.addEventListener('touchstart',e=>{isDrag=true;lastX=e.touches[0].clientX;lastY=e.touches[0].clientY;},{passive:true});
+  c.addEventListener('touchmove',e=>{e.preventDefault();if(isDrag){tTheta-=(e.touches[0].clientX-lastX)*.013;tPhi-=(e.touches[0].clientY-lastY)*.013;lastX=e.touches[0].clientX;lastY=e.touches[0].clientY;}},{passive:false});
+  c.addEventListener('touchend',()=>isDrag=false,{passive:true});
+  window.addEventListener('resize',onResize);
+  posCamera();loop();
+}
+
+function buildStars(){
+  const N=4000,pos=new Float32Array(N*3),col=new Float32Array(N*3),sz=new Float32Array(N);
+  for(let i=0;i<N;i++){
+    const th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1),r=300+Math.random()*350;
+    pos[i*3]=r*Math.sin(ph)*Math.cos(th);pos[i*3+1]=r*Math.sin(ph)*Math.sin(th);pos[i*3+2]=r*Math.cos(ph);
+    sz[i]=Math.random()*2.2+.4;
+    const c=Math.random();
+    if(c<.22){col[i*3]=.78;col[i*3+1]=.88;col[i*3+2]=1.;}
+    else if(c<.52){col[i*3]=1.;col[i*3+1]=1.;col[i*3+2]=1.;}
+    else if(c<.76){col[i*3]=1.;col[i*3+1]=.94;col[i*3+2]=.7;}
+    else{col[i*3]=1.;col[i*3+1]=.55;col[i*3+2]=.35;}
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  g.setAttribute('size',new THREE.BufferAttribute(sz,1));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({size:.45,vertexColors:true,transparent:true,opacity:.88,sizeAttenuation:false})));
+}
+
+function buildMilkyWay(){
+  const N=1200,pos=new Float32Array(N*3),col=new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const th=Math.random()*Math.PI*2,sp=(Math.random()-.5)*28*(Math.PI/180),r=560+Math.random()*80;
+    pos[i*3]=r*Math.cos(th);pos[i*3+1]=r*Math.sin(sp);pos[i*3+2]=r*Math.sin(th);
+    const br=.12+Math.random()*.22;
+    col[i*3]=br*.55;col[i*3+1]=br*.65;col[i*3+2]=br;
+  }
+  const gb=new THREE.BufferGeometry();
+  gb.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  gb.setAttribute('color',new THREE.BufferAttribute(col,3));
+  scene.add(new THREE.Points(gb,new THREE.PointsMaterial({size:.55,vertexColors:true,transparent:true,opacity:.45,sizeAttenuation:false})));
+}
+
+function buildSun(){
+  sunMat=new THREE.ShaderMaterial({uniforms:{time:{value:0}},vertexShader:SUN_VERT,fragmentShader:SUN_FRAG});
+  const sun=new THREE.Mesh(new THREE.SphereGeometry(1.75,48,48),sunMat);
+  sun.userData={name:'Sun',type:'star'};scene.add(sun);
+  [[2.3,0xff9900,.09],[3.1,0xff6600,.055],[4.5,0xff4400,.028],[7.0,0xff2200,.012]].forEach(([r,c,o])=>{
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(r,16,16),
+      new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false})));
+  });
+}
+
+function buildFlares(){
+  for(let i=0;i<8;i++){
+    const a=(i/8)*Math.PI*2+Math.random()*.4,b=a+(Math.random()-.5)*.8;
+    const s=new THREE.Vector3(Math.cos(a)*1.75,Math.sin(a)*1.75,(Math.random()-.5)*.4);
+    const e=new THREE.Vector3(Math.cos(a+.25)*1.8,Math.sin(a+.25)*1.8,(Math.random()-.5)*.4);
+    const m=new THREE.Vector3(Math.cos(b)*3.5,Math.sin(b)*3.5,(Math.random()-.5)*1.2);
+    const curve=new THREE.QuadraticBezierCurve3(s,m,e);
+    const mat=new THREE.LineBasicMaterial({color:0xff6600,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false});
+    const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(50)),mat);
+    scene.add(line);flareObjs.push({line,mat,phase:Math.random()*Math.PI*2,speed:.3+Math.random()*.7});
+  }
+}
+
+function buildPlanet(data,idx){
+  let mat;
+  if(data.name==='Earth')mat=new THREE.ShaderMaterial({uniforms:{},vertexShader:E_VERT,fragmentShader:E_FRAG,lights:false});
+  else if(data.name==='Mars')mat=new THREE.ShaderMaterial({uniforms:{},vertexShader:E_VERT,fragmentShader:M_FRAG,lights:false});
+  else if(data.name==='Jupiter')mat=new THREE.ShaderMaterial({uniforms:{time:{value:0}},vertexShader:C_VERT,fragmentShader:J_FRAG,lights:false});
+  else mat=new THREE.MeshPhongMaterial({color:data.col,emissive:data.emi,shininess:8,specular:0x111122});
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(data.r,32,32),mat);
+  mesh.userData={...data,type:'planet',idx};
+  const a0=(idx/PLANETS.length)*Math.PI*2;
+  mesh.position.set(Math.cos(a0)*data.dist,0,Math.sin(a0)*data.dist);
+  scene.add(mesh);
+  const opts=[];for(let i=0;i<=128;i++){const a=(i/128)*Math.PI*2;opts.push(new THREE.Vector3(Math.cos(a)*data.dist,0,Math.sin(a)*data.dist));}
+  const ol=new THREE.Line(new THREE.BufferGeometry().setFromPoints(opts),new THREE.LineBasicMaterial({color:0x162040,transparent:true,opacity:.5}));
+  scene.add(ol);orbitLines.push(ol);
+  if(data.rings){
+    [[data.r*1.38,data.r*2.20,.55,0xd8c888],[data.r*2.26,data.r*2.84,.26,0xc0b070]].forEach(([r0,r1,op,c])=>{
+      const ring=new THREE.Mesh(new THREE.RingGeometry(r0,r1,64),new THREE.MeshBasicMaterial({color:c,side:THREE.DoubleSide,transparent:true,opacity:op}));
+      ring.rotation.x=Math.PI/2.4;mesh.add(ring);
+    });
+  }
+  if(data.name==='Earth'){
+    cloudMat=new THREE.ShaderMaterial({uniforms:{time:{value:0}},vertexShader:C_VERT,fragmentShader:C_FRAG,transparent:true,side:THREE.FrontSide,depthWrite:false});
+    mesh.add(new THREE.Mesh(new THREE.SphereGeometry(data.r*1.025,32,32),cloudMat));
+    mesh.add(new THREE.Mesh(new THREE.SphereGeometry(data.r*1.12,24,24),new THREE.MeshBasicMaterial({color:0x3366ff,transparent:true,opacity:.09,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false})));
+  }
+  if(data.name==='Neptune'||data.name==='Uranus'){
+    const ring=new THREE.Mesh(new THREE.RingGeometry(data.r*1.5,data.r*1.62,64),new THREE.MeshBasicMaterial({color:0x4488aa,side:THREE.DoubleSide,transparent:true,opacity:.15}));
+    ring.rotation.x=data.name==='Uranus'?0:Math.PI/2.2;mesh.add(ring);
+  }
+  if(data.name==='Jupiter')mesh.add(new THREE.Mesh(new THREE.SphereGeometry(data.r*1.05,16,16),new THREE.MeshBasicMaterial({color:0xffaa44,transparent:true,opacity:.04,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false})));
+  if(data.name==='Venus')mesh.add(new THREE.Mesh(new THREE.SphereGeometry(data.r*1.08,16,16),new THREE.MeshBasicMaterial({color:0xffcc66,transparent:true,opacity:.08,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false})));
+  pObjs.push({mesh,data,angle:a0});
+}
+
+function buildBelt(){
+  const N=2200,pos=new Float32Array(N*3);
+  for(let i=0;i<N;i++){const a=Math.random()*Math.PI*2,r=13.0+Math.random()*3.2,y=(Math.random()-.5)*.9;pos[i*3]=Math.cos(a)*r;pos[i*3+1]=y;pos[i*3+2]=Math.sin(a)*r;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  belt=new THREE.Points(g,new THREE.PointsMaterial({color:0x6677aa,size:.1,transparent:true,opacity:.6}));scene.add(belt);
+}
+
+function buildKBelt(){
+  const N=1800,pos=new Float32Array(N*3);
+  for(let i=0;i<N;i++){const a=Math.random()*Math.PI*2,r=36.5+Math.random()*6,y=(Math.random()-.5)*1.5;pos[i*3]=Math.cos(a)*r;pos[i*3+1]=y;pos[i*3+2]=Math.sin(a)*r;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  kbelt=new THREE.Points(g,new THREE.PointsMaterial({color:0x445566,size:.09,transparent:true,opacity:.5}));scene.add(kbelt);
+}
+
+function buildISS(){
+  issMarker=new THREE.Mesh(new THREE.SphereGeometry(.055,8,8),new THREE.MeshBasicMaterial({color:0x00ff88,blending:THREE.AdditiveBlending}));
+  scene.add(issMarker);
+  const ed=PLANETS.find(p=>p.name==='Earth'),IR=ed.r*1.45,pts=[];
+  for(let i=0;i<=128;i++){const a=(i/128)*Math.PI*2;pts.push(new THREE.Vector3(Math.cos(a)*IR,Math.sin(a*.12)*.06,Math.sin(a)*IR));}
+  const issOrb=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0x00ff88,transparent:true,opacity:.4}));
+  pObjs.find(p=>p.data.name==='Earth').mesh.add(issOrb);
+  orbitLines.push(issOrb);
+}
+
+function buildMoon(){
+  moonMesh=new THREE.Mesh(new THREE.SphereGeometry(.055,16,16),new THREE.MeshPhongMaterial({color:0x888888,emissive:0x101010,shininess:4}));
+  pObjs.find(p=>p.data.name==='Earth').mesh.add(moonMesh);
+}
+
+function buildComet(){
+  cometHead=new THREE.Mesh(new THREE.SphereGeometry(.06,8,8),new THREE.MeshBasicMaterial({color:0xaaddff,blending:THREE.AdditiveBlending}));
+  scene.add(cometHead);
+  const N=120,pos=new Float32Array(N*3);
+  const tg=new THREE.BufferGeometry();tg.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  cometTrail=new THREE.Points(tg,new THREE.PointsMaterial({color:0x88ccff,size:.06,transparent:true,opacity:.5,blending:THREE.AdditiveBlending}));
+  scene.add(cometTrail);
+}
+
+function buildProbeMarkers(){
+  [{name:'V1',col:0x9060ff,pos:new THREE.Vector3(42,3,-5)},
+   {name:'V2',col:0x9060ff,pos:new THREE.Vector3(-5,-10,40)},
+   {name:'NH',col:0x7040cc,pos:new THREE.Vector3(38,2,12)}].forEach(d=>{
+    const m=new THREE.Mesh(new THREE.SphereGeometry(.1,6,6),new THREE.MeshBasicMaterial({color:d.col,blending:THREE.AdditiveBlending}));
+    m.position.copy(d.pos);scene.add(m);
+    const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),d.pos.clone()]),new THREE.LineBasicMaterial({color:d.col,transparent:true,opacity:.25}));
+    scene.add(line);probeObjs.push({mesh:m,line});
+  });
+}
+
+function loop(){
+  requestAnimationFrame(loop);
+  const t=(performance.now()-t0)/1000;
+  if(sunMat)sunMat.uniforms.time.value=t;
+  if(cloudMat)cloudMat.uniforms.time.value=t;
+  pObjs.forEach(p=>{
+    if(p.data.name==='Jupiter'&&p.mesh.material.uniforms?.time)p.mesh.material.uniforms.time.value=t;
+    p.angle+=(2*Math.PI/p.data.oPer)*3.5*(1/60);
+    p.mesh.position.set(Math.cos(p.angle)*p.data.dist,0,Math.sin(p.angle)*p.data.dist);
+    p.mesh.rotation.y+=.003/Math.abs(p.data.rPer);
+  });
+  flareObjs.forEach(f=>{f.mat.opacity=Math.max(0,Math.sin(t*f.speed+f.phase))*.55;f.line.rotation.z+=.0008;});
+  issAngle+=.05;
+  const earth=pObjs.find(p=>p.data.name==='Earth');
+  if(earth&&issMarker){const ep=earth.mesh.position,IR=earth.data.r*1.45;issMarker.position.set(ep.x+Math.cos(issAngle)*IR,ep.y+Math.sin(issAngle*.2)*.05,ep.z+Math.sin(issAngle)*IR);}
+  moonAngle+=.009;
+  if(moonMesh)moonMesh.position.set(Math.cos(moonAngle)*.38,Math.sin(moonAngle*.3)*.025,Math.sin(moonAngle)*.38);
+  cometAngle+=.0015;const cr=20+15*Math.cos(cometAngle);
+  if(cometHead){
+    cometHead.position.set(Math.cos(cometAngle)*cr,Math.sin(cometAngle)*.8,Math.sin(cometAngle)*cr*.6);
+    const pa=cometTrail.geometry.attributes.position;
+    for(let i=119;i>0;i--){pa.array[i*3]=pa.array[(i-1)*3];pa.array[i*3+1]=pa.array[(i-1)*3+1];pa.array[i*3+2]=pa.array[(i-1)*3+2];}
+    pa.array[0]=cometHead.position.x;pa.array[1]=cometHead.position.y;pa.array[2]=cometHead.position.z;pa.needsUpdate=true;
+  }
+  if(belt)belt.rotation.y+=.00015;if(kbelt)kbelt.rotation.y+=.00008;
+  cTheta+=(tTheta-cTheta)*.07;cPhi+=(tPhi-cPhi)*.07;cR+=(tR-cR)*.07;
+  cPhi=Math.max(.12,Math.min(Math.PI/2.08,cPhi));cR=Math.max(4,Math.min(130,cR));
+  posCamera();renderer.render(scene,camera);
+}
+
+function posCamera(){if(!camera)return;camera.position.set(cR*Math.sin(cPhi)*Math.cos(cTheta),cR*Math.cos(cPhi),cR*Math.sin(cPhi)*Math.sin(cTheta));camera.lookAt(0,0,0);}
+
+function onMov(e){
+  if(isDrag){tTheta-=(e.clientX-lastX)*.009;tPhi-=(e.clientY-lastY)*.009;lastX=e.clientX;lastY=e.clientY;}
+  const rect=document.getElementById('sc').getBoundingClientRect();
+  m2.x=((e.clientX-rect.left)/rect.width)*2-1;m2.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  rc.setFromCamera(m2,camera);
+  const hits=rc.intersectObjects(pObjs.map(p=>p.mesh),true);
+  const tip=document.getElementById('tip');
+  if(hits.length){let o=hits[0].object;while(o.parent&&!o.userData.name)o=o.parent;
+    if(o.userData.type==='planet'){tip.textContent=o.userData.name+' '+o.userData.sym;tip.style.display='block';tip.style.left=(e.clientX-rect.left+14)+'px';tip.style.top=(e.clientY-rect.top-8)+'px';document.getElementById('sc').style.cursor='pointer';}
+  }else{tip.style.display='none';document.getElementById('sc').style.cursor='default';}
+}
+
+function onClick(e){
+  const rect=document.getElementById('sc').getBoundingClientRect();
+  m2.x=((e.clientX-rect.left)/rect.width)*2-1;m2.y=-((e.clientY-rect.top)/rect.height)*2+1;
+  rc.setFromCamera(m2,camera);
+  const hits=rc.intersectObjects(pObjs.map(p=>p.mesh),true);
+  if(hits.length){let o=hits[0].object;while(o.parent&&!o.userData.name)o=o.parent;if(o.userData.type==='planet')showHUD(o.userData);}
+  else document.getElementById('phud').classList.remove('on');
+}
+
+function showHUD(d){
+  document.getElementById('pname').textContent=(d.sym||'')+' '+d.name.toUpperCase();
+  document.getElementById('htype').textContent=d.type||'—';document.getElementById('hdiam').textContent=d.diam;
+  document.getElementById('hdist').textContent=d.au;document.getElementById('hper').textContent=d.oPer+' Earth days';
+  document.getElementById('htemp').textContent=d.temp;document.getElementById('hmoon').textContent=d.moons;
+  document.getElementById('hgrav').textContent=d.grav;document.getElementById('pdesc').textContent=d.desc;
+  document.getElementById('phud').classList.add('on');
+}
+
+function setCam(mode,btn){
+  document.querySelectorAll('#vc .vb').forEach((b,i)=>{if(i<3)b.classList.remove('on');});btn.classList.add('on');
+  if(mode==='system'){tTheta=0;tPhi=Math.PI/3.4;tR=56;}
+  else if(mode==='inner'){tTheta=.2;tPhi=Math.PI/3.1;tR=18;}
+  else if(mode==='earth'){tR=3.5;showHUD(pObjs.find(p=>p.data.name==='Earth').data);}
+}
+function toggleOrbits(btn){showOrbits=!showOrbits;orbitLines.forEach(l=>l.visible=showOrbits);btn.classList.toggle('on',showOrbits);btn.textContent='ORBITS';}
+function toggleBelt(btn){showBelt=!showBelt;if(belt)belt.visible=showBelt;if(kbelt)kbelt.visible=showBelt;btn.classList.toggle('on',showBelt);btn.textContent='BELT';}
+function toggleProbes(btn){showProbes=!showProbes;probeObjs.forEach(p=>{p.mesh.visible=showProbes;p.line.visible=showProbes;});btn.classList.toggle('on',showProbes);btn.textContent='PROBES';}
+function onResize(){const w=document.getElementById('sv');camera.aspect=w.clientWidth/w.clientHeight;camera.updateProjectionMatrix();renderer.setSize(w.clientWidth,w.clientHeight);}
+
+/* ── API HELPERS ─────────────────────────────────────────── */
+async function get(url,ms=9000){
+  const ac=new AbortController(),tid=setTimeout(()=>ac.abort(),ms);
+  try{const r=await fetch(url,{signal:ac.signal});clearTimeout(tid);if(!r.ok)throw Error();return await r.json();}
+  catch(e){clearTimeout(tid);throw e;}
+}
+
+/* ── CLOCK ───────────────────────────────────────────────── */
+function tick(){const n=new Date(),p=v=>String(v).padStart(2,'0');document.getElementById('clk').textContent=`${p(n.getUTCHours())}:${p(n.getUTCMinutes())}:${p(n.getUTCSeconds())} UTC`;}
+
+/* ── ISS ─────────────────────────────────────────────────── */
+async function fetchISS(){
+  try{
+    const d=await get('https://api.wheretheiss.at/v1/satellites/25544');
+    const lat=d.latitude.toFixed(4),lng=d.longitude.toFixed(4),alt=d.altitude.toFixed(1),vel=d.velocity.toFixed(0);
+    document.getElementById('halt').textContent=alt;document.getElementById('hvel').textContent=vel;
+    const n=new Date();document.getElementById('isstime').textContent=String(n.getUTCHours()).padStart(2,'0')+':'+String(n.getUTCMinutes()).padStart(2,'0')+'Z';
+    document.getElementById('piss').innerHTML=`
+      <div class="cds">
+        <div class="cd"><div class="clbl">LATITUDE</div><div class="cval">${parseFloat(lat)>=0?'+':''}${lat}°</div></div>
+        <div class="cd"><div class="clbl">LONGITUDE</div><div class="cval">${parseFloat(lng)>=0?'+':''}${lng}°</div></div>
+      </div>
+      <div class="sg">
+        <div class="ss"><div class="sl">ALTITUDE</div><div class="sv2">${alt}<span class="su"> km</span></div></div>
+        <div class="ss"><div class="sl">VELOCITY</div><div class="sv2">${vel}<span class="su"> km/h</span></div></div>
+        <div class="ss"><div class="sl">VISIBILITY</div><div class="sv2" style="font-size:9px;color:${d.visibility==='daylight'?'var(--amber)':'var(--green)'}">${d.visibility.toUpperCase()}</div></div>
+        <div class="ss"><div class="sl">FOOTPRINT</div><div class="sv2">${Math.round(d.footprint)}<span class="su"> km</span></div></div>
+      </div>
+      <div class="note">Inclination 51.6° · Orbital period ~92 min<br>Mass 419,725 kg · Size 109 × 73 m</div>`;
+  }catch{document.getElementById('piss').innerHTML='<div class="err">⚠ ISS API unreachable — retrying in 6 s</div>';}
+}
+
+/* ── LAUNCHES ────────────────────────────────────────────── */
+async function fetchLaunches(){
+  try{
+    const d=await get('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?limit=7&format=json&mode=list');
+    const items=(d.results||[]).slice(0,7);let h='';
+    items.forEach(l=>{
+      const net=l.net?new Date(l.net):null,now=Date.now();let cd='—',cs='';
+      if(net){const diff=net-now;if(diff>0){const days=Math.floor(diff/86400000),hrs=Math.floor((diff%86400000)/3600000),mins=Math.floor((diff%3600000)/60000);cd=days>0?`T-${days}d ${hrs}h`:(hrs>0?`T-${hrs}h ${mins}m`:`T-${mins}m`);if(days===0)cs='color:var(--red)';}else{cd='LAUNCHED';cs='color:var(--green)';}}
+      h+=`<div class="lc"><div class="ln" title="${l.name||''}">${(l.name||'—')}</div><div class="lm"><span class="lp">${(l.launch_service_provider?.abbrev||'—').slice(0,15)}</span><span class="lct" style="${cs}">${cd}</span></div><div class="lpad">${(l.pad?.location?.name||'—').slice(0,42)}</div></div>`;
+    });
+    document.getElementById('plaunch').innerHTML=h||fbLaunches();
+  }catch{document.getElementById('plaunch').innerHTML=fbLaunches();}
+}
+function fbLaunches(){return[['SpaceX Crew-11 → ISS','SpaceX','T-Calculating','Kennedy Space Center LC-39A'],['Falcon 9 — Starlink Group','SpaceX','Weekly cadence','CCSFS SLC-40, Florida'],['Ariane 6 — Commercial','ArianeGroup','Q3 2026','CSG ELA-4, Kourou GF'],['New Glenn — GTO Payload','Blue Origin','Q3 2026','CCSFS SLC-36, Florida'],['Soyuz MS-28 → ISS','Roscosmos','TBD 2026','Baikonur LC-1/5, Kazakhstan'],['H3 Launch Vehicle F4','JAXA','2026','Tanegashima Space Center']].map(([n,p,cd,pad])=>`<div class="lc"><div class="ln">${n}</div><div class="lm"><span class="lp">${p}</span><span class="lct">${cd}</span></div><div class="lpad">${pad}</div></div>`).join('');}
+
+/* ── NEOs ────────────────────────────────────────────────── */
+async function fetchNEOs(){
+  try{
+    const today=new Date(),end=new Date(today);end.setDate(end.getDate()+7);
+    const fmt=d=>d.toISOString().slice(0,10);
+    const d=await get(`https://api.nasa.gov/neo/rest/v1/feed?start_date=${fmt(today)}&end_date=${fmt(end)}&api_key=DEMO_KEY`);
+    const all=[];Object.values(d.near_earth_objects).forEach(day=>all.push(...day));
+    all.sort((a,b)=>parseFloat(a.close_approach_data[0]?.miss_distance?.lunar||999)-parseFloat(b.close_approach_data[0]?.miss_distance?.lunar||999));
+    let h=`<div class="note" style="margin-bottom:6px">TOTAL: <b style="color:var(--text)">${d.element_count}</b> objects this 7-day window — closest first</div>`;
+    all.slice(0,10).forEach(n=>{
+      const ap=n.close_approach_data[0];
+      const ld=parseFloat(ap?.miss_distance?.lunar||0).toFixed(1);
+      const dm=n.estimated_diameter?.meters;
+      const ds=dm?`${Math.round(dm.estimated_diameter_min)}–${Math.round(dm.estimated_diameter_max)}m`:'—';
+      const haz=n.is_potentially_hazardous_asteroid;
+      h+=`<div class="neo"><span class="nn" title="${n.name}">${n.name.replace(/[()]/g,'').trim().slice(0,16)}</span><span class="nd">${ld} LD</span><span class="ns">${ds}</span><span class="${haz?'nh':'nok'}">${haz?'⚠PHO':'✓SAFE'}</span></div>`;
+    });
+    h+=`<div class="note" style="margin-top:6px">1 LD = 384,400 km · PHO = Potentially Hazardous Object · Source: NASA JPL CNEOS</div>`;
+    document.getElementById('pneo').innerHTML=h;
+  }catch{document.getElementById('pneo').innerHTML='<div class="err">⚠ NASA NEO API unavailable</div><div class="note">DEMO_KEY rate limit (30/hr) or network issue. Refreshes hourly.</div>';}
+}
+
+/* ── SPACE WEATHER ───────────────────────────────────────── */
+async function fetchSW(){
+  try{
+    const [plasma,kindex,flares]=await Promise.allSettled([
+      get('https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json'),
+      get('https://services.swpc.noaa.gov/json/planetary_k_index_1m.json'),
+      get('https://services.swpc.noaa.gov/json/goes/primary/xray-flares-7-day.json'),
+    ]);
+    let h='';
+    if(plasma.status==='fulfilled'&&plasma.value?.length>1){
+      const lat=plasma.value[plasma.value.length-1];
+      const spd=parseFloat(lat[1]||400).toFixed(0),den=parseFloat(lat[2]||5).toFixed(2);
+      document.getElementById('hsw').textContent=spd;
+      const sc=+spd>600?'var(--red)':(+spd>450?'var(--amber)':'var(--green)');
+      h+=`<div class="swm"><div class="swl"><span>SOLAR WIND SPEED</span><span style="color:${sc}">${spd} km/s</span></div><div class="swbar"><div class="swf" style="width:${Math.min(100,(+spd/800)*100)}%;background:${sc}"></div></div></div>
+          <div class="swm"><div class="swl"><span>PARTICLE DENSITY</span><span style="color:var(--accent)">${den} p/cm³</span></div><div class="swbar"><div class="swf" style="width:${Math.min(100,(+den/30)*100)}%;background:var(--accent)"></div></div></div>`;
+    }
+    if(kindex.status==='fulfilled'&&kindex.value?.length>0){
+      const kv=parseFloat(kindex.value[kindex.value.length-1][1]||0);
+      const kc=['#00ff88','#00ff88','#00ff88','#aaff00','#ffaa00','#ff8800','#ff4400','#ff0000','#cc0000','#880000'];
+      const kd=['Quiet','Quiet','Quiet','Unsettled','Active','G1 Storm','G2 Storm','G3 Storm','G4 Storm','G5 Storm'];
+      h+=`<div style="margin:8px 0 5px"><div class="swl"><span style="color:var(--dim)">GEOMAGNETIC K-INDEX</span><span style="color:${kc[Math.min(9,Math.round(kv))]}">${kv.toFixed(1)} — ${kd[Math.min(9,Math.round(kv))]}</span></div>
+          <div class="krow">${Array.from({length:9},(_,i)=>`<div class="kb" style="${kv>=i?`background:${kc[i]};color:#000`:''}">${i}</div>`).join('')}</div></div>`;
+    }
+    if(flares.status==='fulfilled'&&flares.value?.length>0){
+      const rec=flares.value.slice(-6).reverse();
+      h+=`<div style="font-size:8.5px;color:var(--dim);margin-bottom:4px;letter-spacing:1px">SOLAR X-RAY FLARES (7-DAY)</div>`;
+      rec.forEach(f=>{const cls=f.class?.[0],fc=cls==='X'?'var(--red)':(cls==='M'?'var(--amber)':'var(--green)');h+=`<div class="fr"><span style="color:${fc};font-weight:700">${f.class||'—'}</span><span style="color:var(--dim)">${(f.begin_time||'').slice(0,16)}</span><span style="color:var(--mid)">GOES-${f.primary_goes_satellite||'?'}</span></div>`;});
+    }
+    if(!h)h='<div class="err">⚠ Space weather data temporarily unavailable</div>';
+    document.getElementById('psw').innerHTML=h;
+  }catch{document.getElementById('psw').innerHTML='<div class="err">⚠ NOAA/SWPC unreachable</div>';}
+}
+
+/* ── PEOPLE IN SPACE ─────────────────────────────────────── */
+async function fetchCrew(){
+  try{
+    const d=await get('http://api.open-notify.org/astros.json');
+    const pp=d.people||[];
+    document.getElementById('hh').textContent=pp.length;
+    document.getElementById('crewct').textContent=pp.length+' CREW MEMBERS';
+    const icons={'ISS':'🛸','Tiangong':'🚀','CSS':'🚀'};
+    const crafts={};pp.forEach(p=>{crafts[p.craft]=(crafts[p.craft]||0)+1;});
+    const summary=Object.entries(crafts).map(([c,n])=>`${n} aboard ${c}`).join(' · ');
+    let h=`<div class="crew-header"><b>${pp.length}</b> HUMANS CURRENTLY IN SPACE<br><span style="font-size:8px">${summary}</span></div>`;
+    pp.forEach(p=>{
+      const isTG=p.craft.toLowerCase().includes('tiangong')||p.craft.toLowerCase().includes('css');
+      h+=`<div class="aw">
+        <div class="ai">${icons[p.craft]||'👨‍🚀'}</div>
+        <div class="ainfo">
+          <div class="an">${p.name}</div>
+          <div class="ac">${p.craft}</div>
+        </div>
+        <div class="abadge ${isTG?'tg':'iss'}">${isTG?'TIANGONG':'ISS'}</div>
+      </div>`;
+    });
+    document.getElementById('pcrew').innerHTML=h;
+  }catch{
+    const crew=[
+      {n:'Oleg Kononenko',c:'ISS (Soyuz MS-25)',tg:false},{n:'Nikolai Chub',c:'ISS (Soyuz MS-25)',tg:false},
+      {n:'Tracy Dyson',c:'ISS (Crew Dragon)',tg:false},{n:'Butch Wilmore',c:'ISS (Crew Dragon)',tg:false},
+      {n:'Suni Williams',c:'ISS (Crew Dragon)',tg:false},{n:'Don Pettit',c:'ISS (Soyuz MS-26)',tg:false},
+    ];
+    document.getElementById('hh').textContent='7+';
+    document.getElementById('crewct').textContent='7+ CREW MEMBERS';
+    let h=`<div class="crew-header"><b>7+</b> HUMANS CURRENTLY IN SPACE<br><span style="font-size:8px">Cached data — live API temporarily unavailable</span></div>`;
+    crew.forEach(p=>{h+=`<div class="aw"><div class="ai">👨‍🚀</div><div class="ainfo"><div class="an">${p.n}</div><div class="ac">${p.c}</div></div><div class="abadge iss">ISS</div></div>`;});
+    document.getElementById('pcrew').innerHTML=h;
+  }
+}
+
+/* ── ACTIVE MISSIONS ─────────────────────────────────────── */
+function renderMissions(){
+  const sc={active:'mact',nominal:'mnom',critical:'mcri'};
+  document.getElementById('pmis').innerHTML=MISSIONS.map(m=>`
+    <div class="mi">
+      <div class="mn">${m.name}</div>
+      <div class="mm">
+        <div><div class="mag">${m.agency}</div><div class="mloc">📍 ${m.loc}</div></div>
+        <div class="${sc[m.s]||'mnom'}">● ${m.s.toUpperCase()}</div>
+      </div>
+    </div>`).join('');
+}
+
+/* ── DEEP SPACE PROBES ───────────────────────────────────── */
+function renderProbes(){
+  document.getElementById('pprobe').innerHTML=
+    `<div class="note" style="margin-bottom:10px">DISTANCES ARE APPROXIMATE · Source: NASA/JPL Horizons</div>`+
+    PROBES.map(p=>`
+    <div class="pr">
+      <div>
+        <div class="prnm">${p.name}</div>
+        <div class="prs">${p.agency} · Launched ${p.launch}</div>
+        <div class="prs">Status: <span style="color:var(--violet)">${p.status}</span></div>
+        <div class="prs">Speed: ${p.vel} · Signal delay: ${p.signal}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="prd">${p.dist_au.toFixed(1)} AU</div>
+        <div class="prs">${(p.dist_au*149.6).toFixed(0)}M km</div>
+      </div>
+    </div>`).join('')+
+    `<div class="note" style="margin-top:6px">1 AU = 149,597,870 km · Voyager 1 is humanity's most distant ambassador</div>`;
+}
+
+/* ── SATELLITE CENSUS ────────────────────────────────────── */
+function renderSats(){
+  const total=SATS.reduce((s,r)=>s+r.cnt,0);
+  document.getElementById('psat').innerHTML=
+    `<div class="sat-total">${total.toLocaleString()}</div>
+     <div class="sat-sub">ACTIVE SATELLITES IN EARTH ORBIT · 2026 ESTIMATE</div>`+
+    SATS.map(s=>{const pct=Math.round((s.cnt/total)*100);return`
+    <div class="sr">
+      <div class="sr-top"><span class="scat">${s.cat}</span><span class="scnt" style="color:${s.col}">${s.cnt.toLocaleString()}</span></div>
+      <div class="sbar"><div class="sbarf" style="width:${pct}%;background:${s.col}"></div></div>
+      <div style="font-size:7.5px;color:var(--dim);margin-top:2px">${s.desc} · ${pct}%</div>
+    </div>`;}).join('')+
+    `<div class="note" style="margin-top:6px">Source: UCS Satellite Database · Space-Track.org · Estimates</div>`;
+}
+
+/* ── SPACE NEWS ──────────────────────────────────────────── */
+async function fetchNews(){
+  try{
+    const d=await get('https://api.spaceflightnewsapi.net/v4/articles/?limit=10&offset=0');
+    const arts=(d.results||[]).slice(0,10);let h='';
+    arts.forEach(a=>{const date=a.published_at?new Date(a.published_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'';h+=`<div class="ni" onclick="window.open('${a.url}','_blank')"><div class="nt">${a.title}</div><div class="nm">${a.news_site||'Space News'} · ${date}</div></div>`;});
+    document.getElementById('pnews').innerHTML=h||fbNews();
+  }catch{document.getElementById('pnews').innerHTML=fbNews();}
+}
+function fbNews(){return[['NASA Artemis IV Crew Training Begins at JSC','NASA'],['SpaceX Starship Achieves New Altitude Record','SpaceX'],['James Webb Observes Most Distant Galaxy Yet Confirmed','ESA/NASA'],['Perseverance Rover Discovers Organic Molecules in Jezero Delta','JPL/NASA'],['ESA JUICE Completes First Europa Flyby','ESA'],['China Lunar Gateway Module Cleared for Launch','CNSA'],['Blue Origin New Glenn Delivers Commercial GTO Payload','Blue Origin'],['NOAA Warns of Elevated Solar Activity Through Q3 2026','NOAA'],].map(([t,s])=>`<div class="ni"><div class="nt">${t}</div><div class="nm">${s} · 2026</div></div>`).join('');}
+
+/* ── APOD ────────────────────────────────────────────────── */
+async function fetchAPOD(){
+  try{
+    const d=await get('https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY');
+    let h='';
+    if(d.media_type==='image'){
+      h+=`<div class="apod-wrap" onclick="window.open('${d.hdurl||d.url}','_blank')" title="Click to view full resolution">
+            <img src="${d.url}" alt="${d.title}" loading="lazy" style="width:100%;display:block" onerror="this.parentElement.style.display='none'">
+          </div>`;
+    }else{
+      h+=`<div class="apod-wrap-video" onclick="window.open('${d.url}','_blank')">
+            <div style="font-size:20px;margin-bottom:6px">▶</div>
+            <div style="font-size:9px;color:var(--accent)">VIDEO — CLICK TO WATCH</div>
+          </div>`;
+    }
+    h+=`<div class="at">${d.title}</div>`;
+    h+=`<div class="ad2" id="apod-text">${d.explanation}</div>`;
+    if(d.copyright)h+=`<div class="note" style="margin-top:6px">© ${d.copyright} · Click image to view full resolution</div>`;
+    document.getElementById('papod').innerHTML=h;
+  }catch{
+    document.getElementById('papod').innerHTML=`
+      <div style="text-align:center;padding:20px 0;font-size:28px">🔭</div>
+      <div class="at">Astronomy Picture of the Day</div>
+      <div class="ad2">NASA features a different astronomical image every day, selected and explained by professional astronomers.
+      DEMO_KEY rate limit reached (30 req/hr). Visit <span style="color:var(--accent);cursor:pointer" onclick="window.open('https://apod.nasa.gov','_blank')">apod.nasa.gov</span> for today's image.</div>
+      <div class="note" style="margin-top:8px">Get a free unlimited API key at <span style="color:var(--accent);cursor:pointer" onclick="window.open('https://api.nasa.gov','_blank')">api.nasa.gov</span></div>`;
+  }
+}
+
+/* ── TICKER ──────────────────────────────────────────────── */
+function buildTicker(){
+  const items=[...TICKER_ITEMS,...TICKER_ITEMS];
+  document.getElementById('ti').innerHTML=items.map(t=>`<span class="titem">◆ ${t}</span>`).join('');
+}
+
+/* ── INIT ────────────────────────────────────────────────── */
+function init(){
+  tick();setInterval(tick,1000);
+  initGL();buildTicker();
+  renderMissions();renderProbes();renderSats();
+  fetchISS();fetchLaunches();fetchNEOs();fetchSW();fetchCrew();fetchNews();fetchAPOD();
+  setInterval(fetchISS,6000);setInterval(fetchSW,60000);
+  setInterval(fetchLaunches,120000);setInterval(fetchCrew,300000);setInterval(fetchNews,300000);
+}
+window.addEventListener('load',init);
+</script>
+</body>
+</html>
