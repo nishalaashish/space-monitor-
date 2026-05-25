@@ -5,4 +5,4 @@ astronaut crew, satellite data & space weather — built in a single HTML file.
 
 🔴 [Live Demo](https://nishalaashish.github.io/space-monitor-/space-monitor.html)
 
-Space Monitor Dashboard screenshot.png
+[Space Monitor Dashboard](screenshot.png)
