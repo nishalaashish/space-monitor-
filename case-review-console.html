@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Case Review Console</title>
+<style>
+:root{--bg:#0f1420;--panel:#171e2e;--line:#2a3550;--tx:#e8edf7;--mut:#93a0ba;--ac:#4f8cff;--ok:#3ecf8e;--warn:#f5b84a;--bad:#ff6b6b}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--tx);line-height:1.45}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+h1{font-size:18px;margin:0}.badge{font-size:11px;background:#223;border:1px solid var(--line);padding:3px 8px;border-radius:99px;color:var(--mut)}
+nav{display:flex;gap:6px;margin-left:auto}nav button{background:none;border:1px solid var(--line);color:var(--mut);padding:7px 12px;border-radius:8px;cursor:pointer;font-size:13px}
+nav button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+main{max-width:1000px;margin:0 auto;padding:18px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}.stat b{display:block;font-size:22px}.stat span{font-size:12px;color:var(--mut)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.meta{font-size:12px;color:var(--mut);display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.content{background:#0c111c;border:1px solid var(--line);border-radius:8px;padding:12px;font-size:15px;white-space:pre-wrap}
+mark{background:#6b4e00;color:#ffe29a;border-radius:3px;padding:0 2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:640px){.row{grid-template-columns:1fr}}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+select,textarea{width:100%;background:#0c111c;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:9px;font:inherit}
+textarea{min-height:80px;resize:vertical}
+.btn{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;font-size:14px}.btn.sec{background:#243049}
+.hint{font-size:13px;color:var(--mut);background:#10192b;border-left:3px solid var(--ac);padding:8px 10px;border-radius:6px;margin-top:8px}
+.res{padding:10px 12px;border-radius:8px;margin-top:12px;font-size:14px}.res.ok{background:#12301f;border:1px solid #1f6b43}.res.no{background:#3a1a1a;border:1px solid #7a2c2c}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--mut);font-weight:600}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px}.p-ok{background:#12301f;color:var(--ok)}.p-no{background:#3a1a1a;color:var(--bad)}
+.hide{display:none}.small{font-size:12px;color:var(--mut)}
+details{margin-top:10px}summary{cursor:pointer;color:var(--mut);font-size:13px}
+</style></head><body>
+<header><h1>Case Review Console</h1><span class="badge">Practice tool &middot; synthetic cases only</span>
+<nav><button id="t-queue" class="on">Review queue</button><button id="t-appeals">Appeals</button><button id="t-log">Decision log</button><button id="t-policy">Policy guide</button></nav></header>
+<main>
+<div class="stats"><div class="stat"><b id="s-done">0</b><span>Cases reviewed</span></div><div class="stat"><b id="s-acc">&ndash;</b><span>Decision accuracy</span></div><div class="stat"><b id="s-left">0</b><span>Cases left</span></div><div class="stat"><b id="s-app">0</b><span>Appeals reviewed</span></div></div>
+
+<section id="v-queue"><div id="case"></div></section>
+<section id="v-appeals" class="hide"><div id="appeal"></div></section>
+<section id="v-log" class="hide"><div class="card"><div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap"><button class="btn sec" id="exp">Export log (CSV)</button><button class="btn sec" id="rst">Reset session</button></div><div id="logtbl"></div></div></section>
+<section id="v-policy" class="hide"><div class="card"><h3 style="margin-top:0">Mock usage policy (for practice)</h3><div id="pol"></div><p class="small">These policies are invented for this exercise. They are a simplified model of how platform rules map to decisions, not any real company's policy.</p></div></section>
+</main>
+<script>
+const POL={
+ SPAM:{name:"Spam & mass promotion",def:"Repetitive, unsolicited promotion or link-dropping meant to drive traffic or sales.",action:"Remove"},
+ SCAM:{name:"Scam & fraud",def:"Attempts to obtain money, credentials or personal data through deception (fake prizes, impersonation, advance-fee, payment off-platform).",action:"Remove + Escalate"},
+ HARASS:{name:"Harassment & abuse",def:"Targeted insults, threats or demeaning content aimed at a person or group.",action:"Remove or Warn depending on severity"},
+ FAKE:{name:"Fake accounts & inauthentic behaviour",def:"Coordinated or automated accounts, fake reviews, or impersonation of another person or brand.",action:"Escalate"},
+ PII:{name:"Personal information",def:"Sharing private data (phone, address, ID numbers, login details) about someone without consent.",action:"Remove"},
+ NONE:{name:"No violation",def:"Content is within policy. Criticism, strong opinion, jokes and normal selling are allowed.",action:"No action"}
+};
+const ACTIONS=["Remove","Warn user","Escalate","No action"];
+const CASES=[
+ {id:"C-1001",src:"User report: spam",txt:"BUY FOLLOWERS NOW!!! 10,000 followers for $5. Click bit.ly/cheap-fans and DM me for a discount. Limited offer, only today!!!",pol:"SPAM",act:"Remove",why:"Mass promotion with link-dropping and urgency."},
+ {id:"C-1002",src:"User report: scam",txt:"Congratulations! You won a $500 gift card. To claim your prize, send your bank login and the code from your text message to our agent.",pol:"SCAM",act:"Escalate",why:"Fake prize that asks for credentials and a one-time code, which signals account-takeover fraud."},
+ {id:"C-1003",src:"User report: harassment",txt:"@sam your video was so boring, honestly one of the worst I've seen. Please stop posting.",pol:"NONE",act:"No action",why:"Rude but it is criticism of content, not a threat or targeted abuse."},
+ {id:"C-1004",src:"AI-flagged",txt:"You are a worthless idiot and everyone in this group hates you. Delete your account.",pol:"HARASS",act:"Remove",why:"Targeted personal insults and pressure aimed at one user."},
+ {id:"C-1005",src:"User report: privacy",txt:"This is Dana's number: 555-0142 and she lives at 14 Maple Street. Go bother her.",pol:"PII",act:"Remove",why:"Shares private contact data with an intent to harass."},
+ {id:"C-1006",src:"AI-flagged",txt:"5 stars! Best product ever! I work for the company and my friends all agree. Buy it now!",pol:"FAKE",act:"Escalate",why:"Suggests a conflicted or coordinated review. Needs account-level investigation."},
+ {id:"C-1007",src:"User report: scam",txt:"Hi, I'm from Support. Your account is locked. Pay the $20 unlock fee with gift cards and send me the codes.",pol:"SCAM",act:"Escalate",why:"Impersonates support and asks for gift-card payment, a classic scam pattern."},
+ {id:"C-1008",src:"User report: spam",txt:"I'm selling my old bike for $120 in Toronto. It has new tires and a bell. Message me if interested.",pol:"NONE",act:"No action",why:"A normal one-off listing, not mass promotion."},
+ {id:"C-1009",src:"AI-flagged",txt:"Follow me! Follow me! Follow me! Check my page! Check my page! Check my page!",pol:"SPAM",act:"Warn user",why:"Repetitive self-promotion but no link or money. Low severity, so a warning fits first."},
+ {id:"C-1010",src:"User report: fake account",txt:"Official Support Team: this is the real Brand Support account. DM your password so we can verify you.",pol:"FAKE",act:"Escalate",why:"Impersonates a brand and asks for a password. Also fits scam. Escalate for account investigation."},
+ {id:"C-1011",src:"User report: harassment",txt:"If you post that again I will find you and make you regret it.",pol:"HARASS",act:"Escalate",why:"A direct threat. Highest severity, so escalate to the specialist team."},
+ {id:"C-1012",src:"AI-flagged",txt:"That referee was blind lol. Worst call of the season, I'm so angry!",pol:"NONE",act:"No action",why:"Strong opinion and humour about a public event. Not directed at a user."}
+];
+const APPEALS=[
+ {id:"A-2001",ref:"C-1004",txt:"My post was removed for harassment, but I was joking with a friend. We say this to each other all the time.",ctx:"Removed text: \"You are a worthless idiot and everyone in this group hates you.\" The recipient had reported it. The friend has not replied.",ans:"Uphold",why:"The recipient reported it, there is no sign of consent, and the message tells someone to delete their account. Intent is unclear, so the removal stands."},
+ {id:"A-2002",ref:"C-1008",txt:"My bike listing was flagged as spam by mistake. I only posted it once.",ctx:"Original action: flagged by the AI classifier as spam. On review, it is a single, normal listing with no links.",ans:"Overturn",why:"One-off personal listing, no spam signals. The flag was a false positive."}
+];
+const S={i:0,done:0,correct:0,log:[],apps:0,ai:0};
+const $=id=>document.getElementById(id);
+const KW={SPAM:["buy followers","click","limited offer","dm me","discount","only today","follow me","check my page"],SCAM:["gift card","bank login","code","prize","won","unlock fee","claim","send your"],HARASS:["worthless","idiot","hates you","delete your account","find you","regret"],FAKE:["official","support team","real brand","my friends all agree","i work for"],PII:["lives at","number is","address","this is"]};
+function hl(t){let out=t.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));const all=[].concat(...Object.values(KW));all.sort((a,b)=>b.length-a.length).forEach(k=>{out=out.replace(new RegExp("("+k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")","ig"),"<mark>$1</mark>")});return out}
+function signals(t){const l=t.toLowerCase(),r=[];for(const p in KW){const h=KW[p].filter(k=>l.includes(k));if(h.length)r.push(POL[p].name+": "+h.join(", "))}return r}
+function renderCase(){
+ const c=CASES[S.i];$("s-left").textContent=Math.max(CASES.length-S.i,0);
+ if(!c){$("case").innerHTML='<div class="card"><h3>Queue complete</h3><p>You reviewed '+S.done+' cases with '+(S.done?Math.round(S.correct/S.done*100):0)+'% accuracy against the reference answers. Check the <b>Decision log</b> to see your written reasoning, or review the <b>Appeals</b>.</p></div>';return}
+ const sg=signals(c.txt);
+ $("case").innerHTML='<div class="card"><div class="meta"><span><b>'+c.id+'</b></span><span>'+c.src+'</span><span>Case '+(S.i+1)+' of '+CASES.length+'</span></div><div class="content">'+hl(c.txt)+'</div>'
+ +'<div class="hint"><b>AI-assist (keyword rules):</b> '+(sg.length?sg.join(" &middot; "):"No policy keywords detected")+'<br><span class="small">Suggestions only. You make the decision, and a keyword match can be wrong.</span></div>'
+ +'<div class="row"><div><label>Policy area</label><select id="f-pol">'+Object.keys(POL).map(k=>'<option value="'+k+'">'+POL[k].name+'</option>').join("")+'</select></div><div><label>Decision</label><select id="f-act">'+ACTIONS.map(a=>'<option>'+a+'</option>').join("")+'</select></div></div>'
+ +'<label>Written rationale (required, at least 15 characters)</label><textarea id="f-why" placeholder="Explain which policy applies and why this decision is right."></textarea>'
+ +'<div style="margin-top:12px"><button class="btn" id="sub">Submit decision</button></div><div id="fb"></div></div>';
+ $("sub").onclick=submitCase;
+}
+function submitCase(){
+ const c=CASES[S.i],pol=$("f-pol").value,act=$("f-act").value,why=$("f-why").value.trim();
+ if(why.length<15){$("fb").innerHTML='<div class="res no">Please write a short rationale. Clear documentation is part of every decision.</div>';return}
+ const ok=(pol===c.pol&&act===c.act);S.done++;if(ok)S.correct++;
+ S.log.push({id:c.id,type:"Case",policy:POL[pol].name,decision:act,match:ok,rationale:why});
+ $("fb").innerHTML='<div class="res '+(ok?'ok':'no')+'"><b>'+(ok?'Matches the reference answer.':'Different from the reference answer.')+'</b><br>Reference: '+POL[c.pol].name+' &rarr; '+c.act+'.<br>'+c.why+'</div><div style="margin-top:12px"><button class="btn" id="nx">Next case</button></div>';
+ $("sub").disabled=true;$("nx").onclick=()=>{S.i++;renderCase();stats()};stats()
+}
+function renderAppeal(){
+ const a=APPEALS[S.ai];
+ if(!a){$("appeal").innerHTML='<div class="card"><h3>All appeals reviewed</h3><p>Check the Decision log for your notes.</p></div>';return}
+ $("appeal").innerHTML='<div class="card"><div class="meta"><b>'+a.id+'</b><span>Appeal of '+a.ref+'</span></div><div class="content">User says: '+a.txt+'</div><div class="hint">'+a.ctx+'</div>'
+ +'<label>Decision</label><select id="a-dec"><option>Uphold</option><option>Overturn</option></select><label>Written rationale (required)</label><textarea id="a-why"></textarea>'
+ +'<div style="margin-top:12px"><button class="btn" id="a-sub">Submit appeal decision</button></div><div id="a-fb"></div></div>';
+ $("a-sub").onclick=()=>{const d=$("a-dec").value,w=$("a-why").value.trim();if(w.length<15){$("a-fb").innerHTML='<div class="res no">Please document your reasoning first.</div>';return}
+  const ok=d===a.ans;S.apps++;S.log.push({id:a.id,type:"Appeal",policy:"Appeal of "+a.ref,decision:d,match:ok,rationale:w});
+  $("a-fb").innerHTML='<div class="res '+(ok?'ok':'no')+'"><b>Reference: '+a.ans+'.</b><br>'+a.why+'</div><div style="margin-top:12px"><button class="btn" id="a-nx">Next</button></div>';$("a-sub").disabled=true;$("a-nx").onclick=()=>{S.ai++;renderAppeal();stats()};stats()}
+}
+function stats(){$("s-done").textContent=S.done;$("s-acc").textContent=S.done?Math.round(S.correct/S.done*100)+"%":"–";$("s-left").textContent=Math.max(CASES.length-S.i,0);$("s-app").textContent=S.apps;renderLog()}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function renderLog(){
+ $("logtbl").innerHTML=S.log.length?'<table><tr><th>ID</th><th>Type</th><th>Policy</th><th>Decision</th><th>Result</th><th>Rationale</th></tr>'+S.log.map(l=>'<tr><td>'+l.id+'</td><td>'+l.type+'</td><td>'+esc(l.policy)+'</td><td>'+esc(l.decision)+'</td><td><span class="pill '+(l.match?'p-ok':'p-no')+'">'+(l.match?'matches':'differs')+'</span></td><td>'+esc(l.rationale)+'</td></tr>').join("")+'</table>':'<p class="small">No decisions yet.</p>'}
+function csv(){const q=s=>'"'+String(s).replace(/"/g,'""')+'"';const rows=[["id","type","policy","decision","matches_reference","rationale"]].concat(S.log.map(l=>[l.id,l.type,l.policy,l.decision,l.match,l.rationale]));return rows.map(r=>r.map(q).join(",")).join("\n")}
+$("exp").onclick=()=>{const b=new Blob([csv()],{type:"text/csv"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="decision-log.csv";a.click()};
+$("rst").onclick=()=>{S.i=0;S.done=0;S.correct=0;S.log=[];S.apps=0;S.ai=0;renderCase();renderAppeal();stats()};
+$("pol").innerHTML=Object.keys(POL).map(k=>'<p><b>'+POL[k].name+'</b><br>'+POL[k].def+'<br><span class="small">Typical action: '+POL[k].action+'</span></p>').join("");
+const tabs={queue:"v-queue",appeals:"v-appeals",log:"v-log",policy:"v-policy"};
+Object.keys(tabs).forEach(k=>$("t-"+k).onclick=()=>{Object.keys(tabs).forEach(j=>{$(tabs[j]).classList.toggle("hide",j!==k);$("t-"+j).classList.toggle("on",j===k)})});
+renderCase();renderAppeal();stats();
+</script></body></html>
