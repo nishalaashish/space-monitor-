@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scam &amp; Fraud Signal Checker</title>
+<style>
+:root{--bg:#0f1420;--panel:#171e2e;--line:#2a3550;--tx:#e8edf7;--mut:#93a0ba;--ac:#4f8cff;--ok:#3ecf8e;--warn:#f5b84a;--bad:#ff6b6b}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--tx);line-height:1.45}
+header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}h1{font-size:18px;margin:0}
+.badge{font-size:11px;background:#223;border:1px solid var(--line);padding:3px 8px;border-radius:99px;color:var(--mut)}
+main{max-width:900px;margin:0 auto;padding:18px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+textarea{width:100%;min-height:130px;background:#0c111c;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;resize:vertical}
+.btn{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 16px;cursor:pointer;font-size:14px;margin-right:6px}.btn.sec{background:#243049}
+.ex{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.ex button{background:#10192b;border:1px solid var(--line);color:var(--mut);border-radius:99px;padding:5px 11px;font-size:12px;cursor:pointer}
+.meter{height:12px;background:#0c111c;border-radius:99px;overflow:hidden;border:1px solid var(--line);margin:8px 0}.meter i{display:block;height:100%;width:0;transition:width .4s}
+.lvl{font-size:22px;font-weight:700}.sig{padding:9px 11px;border:1px solid var(--line);border-radius:8px;margin-top:8px;font-size:14px;background:#10192b}
+.sig b{color:var(--warn)}.small{font-size:12px;color:var(--mut)}mark{background:#6b4e00;color:#ffe29a;border-radius:3px;padding:0 2px}
+.content{background:#0c111c;border:1px solid var(--line);border-radius:8px;padding:10px;white-space:pre-wrap;font-size:14px;margin-top:10px}
+ul{margin:6px 0 0 18px;padding:0}
+</style></head><body>
+<header><h1>Scam &amp; Fraud Signal Checker</h1><span class="badge">Rule-based demo &middot; runs in your browser, nothing is sent anywhere</span></header>
+<main>
+<div class="card"><label for="msg" class="small">Paste a message, email or post to check for common scam and fraud signals</label>
+<textarea id="msg" placeholder="Paste text here..."></textarea>
+<div class="ex"><span class="small">Try an example:</span><button data-i="0">Prize scam</button><button data-i="1">Fake support</button><button data-i="2">Normal message</button><button data-i="3">Payment request</button></div>
+<button class="btn" id="go">Analyze</button><button class="btn sec" id="clr">Clear</button></div>
+<div id="out"></div>
+<div class="card"><b>How it works</b><p class="small">The checker scans the text for signals that commonly appear in scams: urgency, requests for credentials or codes, unusual payment methods, prize or too-good-to-be-true offers, impersonation of support or authority, suspicious links and requests to move off-platform. Each signal has a weight, and the weights are added into a risk score (0 to 100). It is a simple rule-based demo, not a trained model, so it can miss scams and flag harmless messages. A human reviewer should always make the final decision.</p></div>
+</main>
+<script>
+const RULES=[
+ {id:"urgency",label:"Urgency or pressure",w:12,why:"Scammers push people to act before they can think or verify.",rec:"Slow down. Real organizations rarely demand action within minutes.",re:/\b(urgent|immediately|right now|act now|within \d+ (hours?|minutes?)|last chance|only today|limited (time|offer)|final notice|expires? (today|soon))\b/gi},
+ {id:"cred",label:"Request for passwords, codes or login details",w:30,why:"Legitimate services never ask for passwords or one-time codes.",rec:"Never share passwords, PINs or verification codes. Escalate as possible account-takeover fraud.",re:/\b(password|passcode|pin\b|one[- ]time (code|password)|verification code|security code|bank login|login details|sign[- ]in details|otp)\b/gi},
+ {id:"pay",label:"Unusual payment method",w:28,why:"Gift cards, crypto and wire transfers are hard to reverse and are favoured by scammers.",rec:"Treat any request for gift cards, crypto or wire transfer as a strong fraud signal.",re:/\b(gift ?cards?|itunes card|google play card|bitcoin|btc|crypto(currency)?|wire transfer|western union|moneygram|e-?transfer (me|to)|zelle)\b/gi},
+ {id:"prize",label:"Prize or too-good-to-be-true offer",w:20,why:"Unexpected winnings and guaranteed returns are classic bait.",rec:"If you didn't enter a contest, you didn't win one.",re:/\b(you (have )?won|congratulations|claim your (prize|reward)|free (money|iphone|gift)|guaranteed (profit|returns?|income)|double your|risk[- ]free|get rich)\b/gi},
+ {id:"imp",label:"Impersonation of support, bank or authority",w:18,why:"Fraudsters pose as support teams, banks or government agencies to gain trust.",rec:"Verify through the official website or app, not through the message itself.",re:/\b(from (the )?(support|security|billing|fraud) (team|department)|official (support|account)|customer (care|support)|your account (is|has been) (locked|suspended|compromised|limited)|(irs|cra|revenue agency)|tax (refund|office)|arrest warrant)\b/gi},
+ {id:"link",label:"Suspicious link",w:15,why:"Shortened or look-alike links can hide where you are really going.",rec:"Don't click. Check the real domain, and report the link.",re:/\b(bit\.ly|tinyurl|t\.co|goo\.gl|cutt\.ly|rb\.gy|[a-z0-9-]+\.(xyz|top|click|work|support)\b|https?:\/\/\d{1,3}(\.\d{1,3}){3})/gi},
+ {id:"off",label:"Request to move off-platform",w:12,why:"Moving to private chat or another app removes the platform's protections.",rec:"Keep communication on the platform where it can be reviewed.",re:/\b(whatsapp|telegram|signal me|text me at|contact me (at|on)|dm me|move (this|the chat) to)\b/gi},
+ {id:"fee",label:"Upfront fee or advance payment",w:20,why:"Asking for a fee before delivering a prize, loan or job is a hallmark of advance-fee fraud.",rec:"Legitimate employers and lenders do not charge you to get started.",re:/\b(processing fee|unlock fee|release fee|advance (fee|payment)|pay (a )?(small )?fee|registration fee|deposit (to|before))\b/gi},
+ {id:"pii",label:"Request for personal or financial information",w:18,why:"Collecting ID or banking details enables identity theft.",rec:"Do not send ID numbers, card or account details through messages.",re:/\b(social insurance|sin number|ssn|passport|driver'?s? licen[cs]e|card number|cvv|account number|date of birth|mother'?s maiden)\b/gi}
+];
+const EX=[
+ "Congratulations! You won a $500 gift card. Claim your prize now: bit.ly/win-500. Send your bank login and the code we text you. Offer expires today!",
+ "Hi, this is the Support Team. Your account is locked. Pay a small unlock fee with gift cards and send me the codes on WhatsApp right now to avoid suspension.",
+ "Hey! Are we still meeting for coffee on Saturday at 11? I can bring the book you wanted. Let me know if the time works for you.",
+ "Please send the deposit by wire transfer or bitcoin today. After that, send a photo of your passport and driver's licence so I can confirm your identity."
+];
+const $=id=>document.getElementById(id);
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+function analyze(t){
+ const hits=[];let score=0;
+ RULES.forEach(r=>{const m=t.match(r.re);if(m){const u=[...new Set(m.map(x=>x.toLowerCase()))];hits.push({r,u});score+=r.w}});
+ if(hits.length>=4)score+=10;
+ return {score:Math.min(100,score),hits};
+}
+function level(s){return s>=60?{n:"High risk",c:"var(--bad)",a:"Escalate for review. Likely fraud or a scam."}:s>=30?{n:"Medium risk",c:"var(--warn)",a:"Needs human review. Check the context and the sender's history."}:{n:"Low risk",c:"var(--ok)",a:"No strong signals found. Still use judgment, since rules can miss things."}}
+function run(){
+ const t=$("msg").value.trim();
+ if(!t){$("out").innerHTML='<div class="card small">Paste some text first.</div>';return}
+ const a=analyze(t),L=level(a.score);
+ let hl=esc(t);a.hits.forEach(h=>h.u.forEach(w=>{hl=hl.replace(new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"ig"),m=>"<mark>"+m+"</mark>")}));
+ $("out").innerHTML='<div class="card"><div class="lvl" style="color:'+L.c+'">'+L.n+' &middot; '+a.score+'/100</div><div class="meter"><i style="width:'+a.score+'%;background:'+L.c+'"></i></div><div><b>Suggested action:</b> '+L.a+'</div>'
+ +'<div class="content">'+hl+'</div>'
+ +(a.hits.length?a.hits.map(h=>'<div class="sig"><b>'+h.r.label+'</b> (+'+h.r.w+')<br>Found: '+h.u.map(esc).join(", ")+'<br><span class="small">Why it matters: '+h.r.why+'</span><br><span class="small">What to do: '+h.r.rec+'</span></div>').join(""):'<div class="sig">No scam signals were detected in this text.</div>')
+ +'<p class="small">Signals found: '+a.hits.length+' of '+RULES.length+' rule groups.</p></div>';
+}
+$("go").onclick=run;$("clr").onclick=()=>{$("msg").value="";$("out").innerHTML=""};
+document.querySelectorAll(".ex button").forEach(b=>b.onclick=()=>{$("msg").value=EX[b.dataset.i];run()});
+</script></body></html>
